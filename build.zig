@@ -71,6 +71,9 @@ pub fn build(b: *std.Build) void {
         },
         else => {
             lib.linkSystemLibrary("pthread");
+            lib.root_module.addCMacro("__USE_POSIX", "1");
+            lib.root_module.addCMacro("_XOPEN_SOURCE", "700");
+            lib.root_module.addCMacro("_POSIX_C_SOURCE", "200809L");
             lib.addCSourceFiles(.{
                 .root = upstream.path("src/platform/posix"),
                 .files = &.{"platform.c"},
@@ -78,6 +81,9 @@ pub fn build(b: *std.Build) void {
             });
             lib.root_module.addIncludePath(upstream.path("src/platform/posix"));
         },
+    }
+    if (target.result.os.tag == .macos) {
+        lib.root_module.addCMacro("_DARWIN_C_SOURCE", "null");
     }
 
     lib.addCSourceFiles(.{
