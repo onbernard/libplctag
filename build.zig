@@ -133,6 +133,12 @@ pub fn build(b: *std.Build) void {
     lib.root_module.addIncludePath(upstream.path("src/libplctag/protocols/omron"));
     lib.root_module.addIncludePath(upstream.path("src/libplctag/protocols/system"));
 
+    lib.installHeadersDirectory(upstream.path("src/libplctag/lib"), "", .{
+        .include_extensions = &.{
+            "libplctag.h",
+        },
+    });
+
     const exe = b.addExecutable(.{
         .name = "simple",
         .root_module = b.createModule(.{
