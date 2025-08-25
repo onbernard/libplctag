@@ -28,10 +28,6 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         }),
     });
-    switch (target.result.os.tag) {
-        .windows => lib.linkSystemLibrary("ws2_32"),
-        else => lib.linkSystemLibrary("pthread"),
-    }
 
     lib.addCSourceFiles(.{
         .root = upstream.path("src/libplctag/lib"),
@@ -60,14 +56,21 @@ pub fn build(b: *std.Build) void {
 
     switch (target.result.os.tag) {
         .windows => {
+            lib.linkSystemLibrary("ws2_32");
+            lib.linkSystemLibrary("bcrypt");
             lib.addCSourceFiles(.{
                 .root = upstream.path("src/platform/windows"),
                 .files = &.{"platform.c"},
-                .flags = &.{},
+                .flags = &.{
+                    "-DPLATFORM_WINDOWS=1",
+                    "-DWIN32_LEAN_AND_MEAN",
+                    "-D_CRT_SECURE_NO_WARNINGS",
+                },
             });
             lib.root_module.addIncludePath(upstream.path("src/platform/windows"));
         },
         else => {
+            lib.linkSystemLibrary("pthread");
             lib.addCSourceFiles(.{
                 .root = upstream.path("src/platform/posix"),
                 .files = &.{"platform.c"},
@@ -76,12 +79,6 @@ pub fn build(b: *std.Build) void {
             lib.root_module.addIncludePath(upstream.path("src/platform/posix"));
         },
     }
-
-    lib.addCSourceFiles(.{
-        .root = upstream.path("src/platform/posix"),
-        .files = &.{"platform.c"},
-        .flags = &.{},
-    });
 
     lib.addCSourceFiles(.{
         .root = upstream.path("src/libplctag/protocols/mb"),
