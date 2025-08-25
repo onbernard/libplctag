@@ -29,7 +29,7 @@
             packages = [
               # pkgs.zls
               # pkgs.zig
-              zig-overlay.packages.${system}.default
+              zls.inputs.zig-overlay.packages.${system}.default
               zls.packages.${system}.zls
             ];
           };
