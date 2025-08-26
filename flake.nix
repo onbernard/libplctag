@@ -24,6 +24,15 @@
             inherit system;
             overlays = [zig-overlay.overlays.default];
           };
+          buildScript = pkgs.writeShellScriptBin "zig-build-all" ''
+            set -euo pipefail
+            echo "▶ Building for x86_64-linux (gnu)..."
+            zig build -Dtarget=x86_64-linux-gnu -Dbuild-examples=true -Dbuild-ab-server=true -Doptimize=ReleaseFast
+
+            echo "▶ Building for Windows (gnu)..."
+            zig build -Dtarget=x86_64-windows-gnu -Dbuild-examples=true -Dbuild-ab-server -Doptimize=ReleaseFast
+            echo "✅ All builds finished."
+          '';
         in {
           devShell = pkgs.mkShell {
             packages = [
@@ -32,6 +41,8 @@
               zls.inputs.zig-overlay.packages.${system}.default
               zls.packages.${system}.zls
               pkgs.dprint
+              pkgs.libmodbus
+              buildScript
             ];
           };
         }
