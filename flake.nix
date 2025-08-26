@@ -31,6 +31,7 @@
               # pkgs.zig
               zls.inputs.zig-overlay.packages.${system}.default
               zls.packages.${system}.zls
+              pkgs.dprint
             ];
           };
         }
