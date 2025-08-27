@@ -280,11 +280,6 @@ jobs:
         with:
           ref: ${{ env.BRANCH }}
 
-      - name: Set up LLVM and Clang
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lld llvm llvm-dev clang build-essential cmake libmodbus5 libmodbus-dev
-
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
 
