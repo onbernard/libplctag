@@ -8,6 +8,69 @@ on:
 
 jobs:
 
+  prefetch:
+    runs-on: ubuntu-latest
+    env:
+      ZIG_GLOBAL_CACHE_DIR: zig-global-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.15.1
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Prefetch Zig deps (from build.zig.zon)
+        run: zig build --fetch --global-cache-dir "$ZIG_GLOBAL_CACHE_DIR" --cache-dir .zig-cache
+
+      - name: Cache Zig global cache
+        uses: actions/cache@v4
+        with:
+          path: zig-global-cache
+          key: zig-global-${{ runner.os }}-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            zig-global-${{ runner.os }}-
+
+  build-windows:
+    runs-on: windows-latest
+    needs: prefetch
+    env:
+      ZIG_GLOBAL_CACHE_DIR: C:\zg       # short path to avoid MAX_PATH issues
+      TEMP: C:\t
+      TMP: C:\t
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Zig global cache (from Linux job)
+        uses: actions/cache@v4
+        with:
+          path: C:\zg
+          key: zig-global-ubuntu-latest-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            zig-global-ubuntu-latest-
+
+      - name: Prepare dirs
+        shell: pwsh
+        run: |
+          New-Item -Type Directory -Force C:\zg | Out-Null
+          New-Item -Type Directory -Force C:\t  | Out-Null
+
+      - name: Install Zig 0.15.1
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build (no network needed)
+        shell: pwsh
+        run: |
+          zig build `
+            -Dtarget=x86_64-windows `
+            -Dbuild-examples=true `
+            -Dbuild-ab-server=true `
+            -Dbuild-modbus-server=false `
+            -Doptimize=ReleaseFast `
+            --global-cache-dir "$env:ZIG_GLOBAL_CACHE_DIR" `
+            --cache-dir ".zig-cache"
   # ubuntu_x64:
   #   runs-on: ubuntu-22.04
 
@@ -405,47 +468,47 @@ jobs:
   #       run: zig build -Dtarget=aarch64-macos -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
 
 
-  windows_x64_MinGW:
+  # windows_x64_MinGW:
 
-    runs-on: windows-latest
+  #   runs-on: windows-latest
 
-    env:
-      ZIG_GLOBAL_CACHE_DIR: C:\zg
-      TEMP: C:\t
-      TMP: C:\t
-      VERSION: "2.6.10"
-      DIST: "${{ github.workspace }}\\zig-out\\bin"
-      BRANCH: ${{ github.head_ref || github.ref_name }}
+  #   env:
+  #     ZIG_GLOBAL_CACHE_DIR: C:\zg
+  #     TEMP: C:\t
+  #     TMP: C:\t
+  #     VERSION: "2.6.10"
+  #     DIST: "${{ github.workspace }}\\zig-out\\bin"
+  #     BRANCH: ${{ github.head_ref || github.ref_name }}
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.BRANCH }}
+  #   steps:
+  #     - name: Check out repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ env.BRANCH }}
 
-      - name: Prepare short paths
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force C:\zg | Out-Null
-          New-Item -ItemType Directory -Force C:\t  | Out-Null
+  #     - name: Prepare short paths
+  #       shell: pwsh
+  #       run: |
+  #         New-Item -ItemType Directory -Force C:\zg | Out-Null
+  #         New-Item -ItemType Directory -Force C:\t  | Out-Null
 
-      - name: Set up Zig
-        uses: mlugg/setup-zig@v2
+  #     - name: Set up Zig
+  #       uses: mlugg/setup-zig@v2
 
-      - name: Build
-        run: zig build --fetch -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast --global-cache-dir "$env:ZIG_GLOBAL_CACHE_DIR" ` --cache-dir ".zig-cache"
+  #     - name: Build
+  #       run: zig build -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast --global-cache-dir "$env:ZIG_GLOBAL_CACHE_DIR" ` --cache-dir ".zig-cache"
 
-      - name: Test Basic Functions
-        run: |
-          cd ${{ env.DIST }}
-          echo "start up simulator."
-          start /b .\ab_server.exe --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50
-          echo "waiting for simulator to start up..."
-          timeout /T 5
-          echo "test simple get/set tag."
-          .\simple
-          echo "test callback use."
-          .\test_callback
-          echo "shut down server."
-          taskkill /F /IM ab_server.exe
-        shell: cmd
+  #     - name: Test Basic Functions
+  #       run: |
+  #         cd ${{ env.DIST }}
+  #         echo "start up simulator."
+  #         start /b .\ab_server.exe --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50
+  #         echo "waiting for simulator to start up..."
+  #         timeout /T 5
+  #         echo "test simple get/set tag."
+  #         .\simple
+  #         echo "test callback use."
+  #         .\test_callback
+  #         echo "shut down server."
+  #         taskkill /F /IM ab_server.exe
+  #       shell: cmd
