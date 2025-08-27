@@ -382,14 +382,36 @@ jobs:
   #         echo "Test reconnect after outage"
   #         ${{ env.DIST }}/test_reconnect_after_outage ./ab_server
   
-  macos_ARM64:
+  # macos_ARM64:
 
-    runs-on: macos-latest
+  #   runs-on: macos-latest
+
+  #   env:
+  #     VERSION: "2.6.10"
+  #     BUILD: "${{ github.workspace }}/zig-out"
+  #     DIST: "${{ github.workspace }}/zig-out/bin"
+  #     BRANCH: ${{ github.head_ref || github.ref_name }}
+
+  #   steps:
+  #     - name: Check out repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ env.BRANCH }}
+
+  #     - name: Set up Zig
+  #       uses: mlugg/setup-zig@v2
+
+  #     - name: Build
+  #       run: zig build -Dtarget=aarch64-macos -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
+
+
+  windows_x64_MinGW:
+
+    runs-on: windows-latest
 
     env:
       VERSION: "2.6.10"
-      BUILD: "${{ github.workspace }}/zig-out"
-      DIST: "${{ github.workspace }}/zig-out/bin"
+      DIST: "${{ github.workspace }}\\zig-out\\bin"
       BRANCH: ${{ github.head_ref || github.ref_name }}
 
     steps:
@@ -402,5 +424,19 @@ jobs:
         uses: mlugg/setup-zig@v2
 
       - name: Build
-        run: zig build -Dtarget=aarch64-macos -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
+        run: zig build -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
 
+      - name: Test Basic Functions
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator."
+          start /b .\ab_server.exe --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50
+          echo "waiting for simulator to start up..."
+          timeout /T 5
+          echo "test simple get/set tag."
+          .\simple
+          echo "test callback use."
+          .\test_callback
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
