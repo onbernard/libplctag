@@ -64,7 +64,7 @@ jobs:
         shell: pwsh
         run: |
           zig build `
-            -Dtarget=x86_64-windows `
+            -Dtarget=x86_64-windows-gnu `
             -Dbuild-examples=true `
             -Dbuild-ab-server=true `
             -Dbuild-modbus-server=false `

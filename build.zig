@@ -20,25 +20,28 @@ pub const Options = struct {
     }
 };
 
-fn make_shims_dir(b: *std.Build) std.Build.LazyPath {
-    const shims = b.addWriteFiles();
-    // Case-fix shims so capitalized includes resolve on case-sensitive hosts.
-    _ = shims.add("Windows.h",
-        \\#include <windows.h>
-    );
-    _ = shims.add("Winsock2.h",
-        \\#include <winsock2.h>
-    );
-    _ = shims.add("WinSock2.h",
-        \\#include <winsock2.h>
-    );
-    _ = shims.add("Ws2tcpip.h",
-        \\#include <ws2tcpip.h>
-    );
-    _ = shims.add("WS2tcpip.h",
-        \\#include <ws2tcpip.h>
-    );
-    return shims.getDirectory();
+fn make_shims_dir(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyPath {
+    if (target.result.os.tag == .windows and target.result.abi.isGnu()) {
+        const shims = b.addWriteFiles();
+        // Case-fix shims so capitalized includes resolve on case-sensitive hosts.
+        _ = shims.add("Windows.h",
+            \\#include <windows.h>
+        );
+        _ = shims.add("Winsock2.h",
+            \\#include <winsock2.h>
+        );
+        _ = shims.add("WinSock2.h",
+            \\#include <winsock2.h>
+        );
+        _ = shims.add("Ws2tcpip.h",
+            \\#include <ws2tcpip.h>
+        );
+        _ = shims.add("WS2tcpip.h",
+            \\#include <ws2tcpip.h>
+        );
+        return shims.getDirectory();
+    }
+    return null;
 }
 
 fn make_c_flags(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !std.ArrayList([]const u8) {
@@ -487,10 +490,7 @@ pub fn build(b: *std.Build) !void {
 
     const upstream = b.dependency("libplctag", .{});
 
-    var shims_dir: ?std.Build.LazyPath = null;
-    if (target.result.os.tag == .windows) {
-        shims_dir = make_shims_dir(b);
-    }
+    const shims_dir: ?std.Build.LazyPath = make_shims_dir(b, target);
 
     var c_flags = try make_c_flags(b, target, optimize);
     defer c_flags.deinit(b.allocator);
