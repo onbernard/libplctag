@@ -430,7 +430,7 @@ fn make_ab_server(b: *std.Build, upstream: *std.Build.Dependency, target: std.Bu
 
 fn make_modbus_server(b: *std.Build, upstream: *std.Build.Dependency, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shims_dir: ?std.Build.LazyPath, c_flags: std.ArrayList([]const u8)) !void {
     const exe = b.addExecutable(.{
-        .name = "modbus-server",
+        .name = "modbus_server",
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
