@@ -31,7 +31,7 @@ jobs:
           restore-keys: |
             zig-global-${{ runner.os }}-
 
-  build-windows:
+  windows_x64_MinGW:
     runs-on: windows-latest
     needs: prefetch
     env:
@@ -71,6 +71,22 @@ jobs:
             -Doptimize=ReleaseFast `
             --global-cache-dir "$env:ZIG_GLOBAL_CACHE_DIR" `
             --cache-dir ".zig-cache"
+
+      - name: Test Basic Functions
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator."
+          start /b .\ab_server.exe --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50
+          echo "waiting for simulator to start up..."
+          timeout /T 5
+          echo "test simple get/set tag."
+          .\simple
+          echo "test callback use."
+          .\test_callback
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+
   # ubuntu_x64:
   #   runs-on: ubuntu-22.04
 
