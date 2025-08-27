@@ -373,7 +373,7 @@ fn make_examples(b: *std.Build, upstream: *std.Build.Dependency, target: std.Bui
 
 fn make_ab_server(b: *std.Build, upstream: *std.Build.Dependency, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shims_dir: ?std.Build.LazyPath, c_flags: std.ArrayList([]const u8)) !void {
     const exe = b.addExecutable(.{
-        .name = "ab-server",
+        .name = "ab_server",
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
