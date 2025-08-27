@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ZIG_GLOBAL_CACHE_DIR: zig-global-cache
+
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +39,10 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: C:\zg       # short path to avoid MAX_PATH issues
       TEMP: C:\t
       TMP: C:\t
+      VERSION: "2.6.10"
+      DIST: "${{ github.workspace }}\\zig-out\\bin"
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+
     steps:
       - uses: actions/checkout@v4
 
