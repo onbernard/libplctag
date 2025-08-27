@@ -37,7 +37,6 @@ jobs:
 
       - name: Test Basic Functions
         run: |
-          cd ${{ env.DIST }}
           echo "start up simulator..."
           ${{ env.DIST }}/ab_server --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50 &
           sleep 2
