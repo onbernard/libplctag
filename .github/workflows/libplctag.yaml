@@ -116,3 +116,18 @@ jobs:
           ${{ env.DIST }}/test_indexed_tags
           echo "shut down server."
           killall ab_server -INT &> /dev/null
+
+      - name: Test Reconnect After Outage
+        run: |
+          echo "Test reconnect after outage"
+          ${{ env.DIST }}/test_reconnect_after_outage ./ab_server
+
+      - name: Test Modbus
+        run: |
+          echo "start up simulator..."
+          ${{ env.DIST }}/modbus_server &
+          sleep 2
+          echo "test Modbus callbacks and read/write"
+          ${{ env.DIST }}/test_callback_ex_modbus
+          echo "shut down server."
+          killall modbus_server -TERM &> /dev/null
