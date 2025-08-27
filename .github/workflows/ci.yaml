@@ -1,29 +1,583 @@
-name: Continuous Integration
+name: libplctag CI
 
 on:
   push:
-    branches: [main]
-
+    branches: [ main ]
   pull_request:
-    branches: [main]
-
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
-  build:
+
+  prefetch:
     runs-on: ubuntu-latest
+    env:
+      ZIG_GLOBAL_CACHE_DIR: zig-global-cache
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.15.1
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Prefetch Zig deps (from build.zig.zon)
+        run: zig build --fetch --global-cache-dir "$ZIG_GLOBAL_CACHE_DIR" --cache-dir .zig-cache
+
+      - name: Cache Zig global cache
+        uses: actions/cache@v4
+        with:
+          path: zig-global-cache
+          key: zig-global-${{ runner.os }}-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            zig-global-${{ runner.os }}-
+
+  windows_x64_MinGW:
+    runs-on: windows-latest
+    needs: prefetch
+    env:
+      ZIG_GLOBAL_CACHE_DIR: C:\zg       # short path to avoid MAX_PATH issues
+      TEMP: C:\t
+      TMP: C:\t
+      VERSION: "2.6.10"
+      DIST: "${{ github.workspace }}\\zig-out\\bin"
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Zig global cache (from Linux job)
+        uses: actions/cache@v4
+        with:
+          path: C:\zg
+          key: zig-global-ubuntu-latest-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            zig-global-ubuntu-latest-
+
+      - name: Prepare dirs
+        shell: pwsh
+        run: |
+          New-Item -Type Directory -Force C:\zg | Out-Null
+          New-Item -Type Directory -Force C:\t  | Out-Null
+
+      - name: Install Zig 0.15.1
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build (no network needed)
+        shell: pwsh
+        run: |
+          zig build `
+            -Dtarget=x86_64-windows-gnu `
+            -Dbuild-examples=true `
+            -Dbuild-ab-server=true `
+            -Dbuild-modbus-server=false `
+            -Doptimize=ReleaseFast `
+            --global-cache-dir "$env:ZIG_GLOBAL_CACHE_DIR" `
+            --cache-dir ".zig-cache"
+
+      - name: Test Basic Functions
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator."
+          start /b .\ab_server.exe --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50
+          echo "waiting for simulator to start up..."
+          timeout /T 5
+          echo "test simple get/set tag."
+          .\simple
+          echo "test callback use."
+          .\test_callback
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+
+      - name: Test Micro800
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          start /b .\ab_server.exe --plc=Micro800 --tag=TestDINTArray:DINT[10] --debug
+          timeout /T 5
+          echo "test getting a tag on a Micro800."
+          .\tag_rw2.exe --type=sint32 "--tag=protocol=ab_eip&gateway=127.0.0.1&cpu=micro800&elem_size=4&elem_count=1&name=TestDINTArray[0]" --debug=2
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+  
+      - name: Test Omron NJ/NX
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          start /b .\ab_server.exe --plc=Omron --tag=TestDINTArray:DINT[10] --debug
+          timeout /T 5
+          echo "test getting a tag on an Omron NJ/NX."
+          .\tag_rw2.exe --type=sint32 "--tag=protocol=ab-eip&gateway=127.0.0.1&path=18,127.0.0.1&plc=omron-njnx&name=TestDINTArray" --debug=2
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+  
+      - name: Test PLC/5
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          start /b .\ab_server.exe --plc=PLC/5 --tag=N7[10] --debug
+          timeout /T 5
+          echo "test getting a tag on a PLC/5."
+          .\tag_rw2.exe --type=sint16 "--tag=protocol=ab_eip&gateway=127.0.0.1&plc=plc5&elem_size=2&elem_count=10&name=N7:0" --debug=2
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+  
+      - name: Test SLC 500
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          start /b .\ab_server.exe --plc=SLC500 --tag=N7[10] --debug
+          timeout /T 5
+          echo "test getting a tag on a SLC 500."
+          .\tag_rw2.exe --type=sint16 "--tag=protocol=ab_eip&gateway=127.0.0.1&plc=slc&elem_size=2&elem_count=10&name=N7:0" --debug=2
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+  
+      - name: Test Duplicate Connection ID
+        run: |
+          cd ${{ env.DIST }}
+          dir
+          echo "start up simulator..."
+          start /b .\ab_server.exe --plc=ControlLogix --path=1,0 --tag=TestDINTArray:DINT[10] --reject-fo=5 --debug
+          timeout /T 5
+          echo "test getting a tag with connection failures."
+          .\tag_rw2.exe --type=sint32 "--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&name=TestDINTArray" --debug=2
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+  
+      - name: Test Large Tags
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          start /b .\ab_server.exe --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000]
+          timeout /T 5
+          echo "test getting a large tag."
+          .\tag_rw2.exe --type=sint32 "--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&elem_count=2000&name=TestBigArray" --debug=2
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+        shell: cmd
+  
+      - name: Test Array Notation Read/Write
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          start /b .\ab_server.exe --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[5]
+          timeout /T 5
+          echo "test array notation read/write"
+          .\test_array_notation.exe 127.0.0.1 1,0 TestBigArray 5 2000
+          set test_result=%errorlevel%
+          echo "shut down server."
+          taskkill /F /IM ab_server.exe
+          exit /b %test_result%
+        shell: cmd
+  
+      - name: Test Reconnect After Outage
+        run: |
+          cd ${{ env.DIST }}
+          echo "Test reconnect after outage."
+          .\test_reconnect_after_outage .\ab_server.exe
+        shell: cmd
+
+  ubuntu_x64:
+    runs-on: ubuntu-22.04
+
+    env:
+      VERSION: "2.6.10"
+      ARTIFACT: "libplctag_2.6.10_ubuntu_x64"
+      BUILD: "${{ github.workspace }}/zig-out"
+      DIST: "${{ github.workspace }}/zig-out/bin"
+      BRANCH: ${{ github.head_ref || github.ref_name }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
 
       - name: Set up LLVM and Clang
         run: |
           sudo apt-get update
-          sudo apt-get install -y lld llvm llvm-dev clang
+          sudo apt-get install -y lld llvm llvm-dev clang build-essential cmake libmodbus5 libmodbus-dev
 
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
 
-      - name: Run `build`
-        run: zig build
+      - name: Build
+        run: zig build -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=true -Doptimize=ReleaseFast
+
+      - name: Test Basic Functions
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50 &
+          sleep 2
+          echo "test simple get/set tag."
+          ${{ env.DIST }}/simple
+          echo "test callback use."
+          ${{ env.DIST }}/test_callback
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Micro800
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=Micro800 '--tag=TestDINTArray:DINT[10]' --debug &
+          sleep 2
+          echo "test getting a tag on a Micro800."
+          ${{ env.DIST }}/tag_rw2 --type=sint32  '--tag=protocol=ab_eip&gateway=127.0.0.1&cpu=micro800&elem_size=4&elem_count=1&name=TestDINTArray[0]' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Omron NJ/NX
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=Omron '--tag=TestDINTArray:DINT[10]' --debug  &
+          sleep 2
+          echo "test getting a tag on an Omron NJ/NX."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=18,127.0.0.1&plc=omron-njnx&name=TestDINTArray' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test PLC/5
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=PLC/5 --tag=N7[10] --debug  &
+          sleep 3
+          echo "test getting a tag on a PLC/5."
+          ${{ env.DIST }}/tag_rw2 --type=sint16 '--tag=protocol=ab_eip&gateway=127.0.0.1&plc=plc5&elem_size=2&elem_count=10&name=N7:0' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test SLC 500
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=SLC500 --tag=N7[10] --debug &
+          sleep 3
+          echo "test getting a tag on a SLC 500."
+          ${{ env.DIST }}/tag_rw2 --type=sint16 '--tag=protocol=ab_eip&gateway=127.0.0.1&plc=slc&elem_size=2&elem_count=10&name=N7:0' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Duplicate Connection ID
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestDINTArray:DINT[10] --reject-fo=5 --debug &
+          sleep 2
+          echo "test getting a tag with connection failures."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&name=TestDINTArray' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Large Tags
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] &
+          sleep 2
+          echo "test getting a large tag."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&elem_count=2000&name=TestBigArray'
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test Array Notation Read/Write
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 "--tag=TestBigArray:DINT[2000]" "--tag=Test_Array_1:DINT[1000]" "--tag=Test_Array_2x3:DINT[2,3]" "--tag=Test_Array_2x3x4:DINT[2,3,4]" &
+          sleep 2
+          echo "test array notation read/write"
+          ${{ env.DIST }}/test_indexed_tags
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Reconnect After Outage
+        run: |
+          cd ${{ env.DIST }}
+          echo "Test reconnect after outage"
+          ${{ env.DIST }}/test_reconnect_after_outage ./ab_server
+
+      - name: Test Modbus
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/modbus_server &
+          sleep 2
+          echo "test Modbus callbacks and read/write"
+          ${{ env.DIST }}/test_callback_ex_modbus
+          echo "shut down server."
+          killall modbus_server -TERM &> /dev/null
+
+  ubuntu_x86:
+    runs-on: ubuntu-22.04
+
+    env:
+      VERSION: "2.6.10"
+      BUILD: "${{ github.workspace }}/zig-out"
+      DIST: "${{ github.workspace }}/zig-out/bin"
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+
+      - name: Set up LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lld llvm llvm-dev clang build-essential cmake libmodbus5 libmodbus-dev
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Build
+        run: zig build -Dtarget=x86-linux -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
+
+      - name: Test Basic Functions
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50 &
+          sleep 2
+          echo "test simple get/set tag."
+          ${{ env.DIST }}/simple
+          echo "test callback use."
+          ${{ env.DIST }}/test_callback
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Micro800
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=Micro800 --tag=TestDINTArray:DINT[10] --debug &
+          sleep 2
+          echo "test getting a tag on a Micro800."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab_eip&gateway=127.0.0.1&cpu=micro800&elem_size=4&elem_count=1&name=TestDINTArray[0]' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Omron NJ/NX
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=Omron --tag=TestDINTArray:DINT[10] --debug &
+          sleep 2
+          echo "test getting a tag on an Omron NJ/NX."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=18,127.0.0.1&plc=omron-njnx&name=TestDINTArray' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test PLC/5
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=PLC/5 --tag=N7[10] --debug &
+          sleep 2
+          echo "test getting a tag on a PLC/5."
+          ${{ env.DIST }}/tag_rw2 --type=sint16 '--tag=protocol=ab_eip&gateway=127.0.0.1&plc=plc5&elem_size=2&elem_count=10&name=N7:0' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test SLC 500
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=SLC500 --tag=N7[10] --debug &
+          sleep 2
+          echo "test getting a tag on a SLC 500."
+          ${{ env.DIST }}/tag_rw2 --type=sint16 '--tag=protocol=ab_eip&gateway=127.0.0.1&plc=slc&elem_size=2&elem_count=10&name=N7:0' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Duplicate Connection ID
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestDINTArray:DINT[10] --reject-fo=5 --debug &
+          sleep 2
+          echo "test getting a tag with connection failures."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&name=TestDINTArray' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Large Tags
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] &
+          sleep 2
+          echo "test getting a large tag."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&elem_count=2000&name=TestBigArray'
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Array Notation Read/Write
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[5] &
+          sleep 2
+          echo "test array notation read/write"
+          ${{ env.DIST }}/test_array_notation 127.0.0.1 1,0 TestBigArray 5 2000
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Reconnect After Outage
+        run: |
+          cd ${{ env.DIST }}
+          echo "Test reconnect after outage"
+          ${{ env.DIST }}/test_reconnect_after_outage ./ab_server
+
+  macos_x64:
+
+    runs-on: macos-latest
+
+    env:
+      VERSION: "2.6.10"
+      BUILD: "${{ github.workspace }}/zig-out"
+      DIST: "${{ github.workspace }}/zig-out/bin"
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Build
+        run: zig build -Dtarget=x86_64-macos -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
+
+      - name: Test Basic Functions
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50 &
+          sleep 2
+          echo "test simple get/set tag."
+          ${{ env.DIST }}/simple
+          echo "test callback use."
+          ${{ env.DIST }}/test_callback
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+
+      - name: Test Micro800
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --debug --plc=Micro800 --tag=TestDINTArray:DINT[10] &
+          sleep 2
+          echo "test getting a tag on a Micro800."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab_eip&gateway=127.0.0.1&cpu=micro800&elem_size=4&elem_count=1&name=TestDINTArray[0]' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test Omron NJ/NX
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=Omron --tag=TestDINTArray:DINT[10] --debug &
+          sleep 2
+          echo "test getting a tag on an Omron NJ/NX."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=18,127.0.0.1&plc=omron-njnx&name=TestDINTArray' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test PLC/5
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=PLC/5 --tag=N7[10] --debug &
+          sleep 2
+          echo "test getting a tag on a PLC/5."
+          ${{ env.DIST }}/tag_rw2 --type=sint16 '--tag=protocol=ab_eip&gateway=127.0.0.1&plc=plc5&elem_size=2&elem_count=10&name=N7:0' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test SLC 500
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=SLC500 --tag=N7[10] --debug &
+          sleep 2
+          echo "test getting a tag on a SLC 500."
+          ${{ env.DIST }}/tag_rw2 --type=sint16 '--tag=protocol=ab_eip&gateway=127.0.0.1&plc=slc&elem_size=2&elem_count=10&name=N7:0' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test Duplicate Connection ID
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestDINTArray:DINT[10] --reject-fo=5 --debug &
+          sleep 2
+          echo "test getting a tag with connection failures."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&name=TestDINTArray' --debug=2
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test Large Tags
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] &
+          sleep 2
+          echo "test getting a large tag."
+          ${{ env.DIST }}/tag_rw2 --type=sint32 '--tag=protocol=ab-eip&gateway=127.0.0.1&path=1,0&plc=ControlLogix&elem_count=2000&name=TestBigArray'
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test Array Notation Read/Write
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[5] &
+          sleep 2
+          echo "test array notation read/write"
+          ${{ env.DIST }}/test_array_notation 127.0.0.1 1,0 TestBigArray 5 2000
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+  
+      - name: Test Reconnect After Outage
+        run: |
+          cd ${{ env.DIST }}
+          echo "Test reconnect after outage"
+          ${{ env.DIST }}/test_reconnect_after_outage ./ab_server
+  
+  macos_ARM64:
+
+    runs-on: macos-latest
+
+    env:
+      VERSION: "2.6.10"
+      BUILD: "${{ github.workspace }}/zig-out"
+      DIST: "${{ github.workspace }}/zig-out/bin"
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Build
+        run: zig build -Dtarget=aarch64-macos -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
