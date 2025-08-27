@@ -119,8 +119,9 @@ jobs:
 
       - name: Test Reconnect After Outage
         run: |
+          cd {{ env.DIST }}
           echo "Test reconnect after outage"
-          ${{ env.DIST }}/test_reconnect_after_outage {{ env.DIST }}/ab_server
+          ${{ env.DIST }}/test_reconnect_after_outage ./ab_server
 
       - name: Test Modbus
         run: |
