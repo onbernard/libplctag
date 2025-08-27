@@ -519,7 +519,7 @@ pub fn build(b: *std.Build) !void {
     if (options.build_ab_server) {
         try make_ab_server(b, upstream, target, optimize, shims_dir, c_flags);
     }
-    if (options.build_modbus_server and target.result.os.tag == .linux) {
+    if (options.build_modbus_server and target.result.os.tag == .linux and target.result.cpu.arch == .x86_64) {
         try make_modbus_server(b, upstream, target, optimize, shims_dir, c_flags);
     }
 }

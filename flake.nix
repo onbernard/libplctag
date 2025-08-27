@@ -32,6 +32,9 @@
             echo "▶ Building for x86-linux..."
             zig build -Dtarget=x86-linux -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
 
+            echo "▶ Building for x86_64-macos..."
+            zig build -Dtarget=x86_64-macos -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
+
             echo "▶ Building for Windows..."
             zig build -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server -Dbuild-modbus-server=true -Doptimize=ReleaseFast
             echo "✅ All builds finished."
