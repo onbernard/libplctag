@@ -21,10 +21,13 @@ exe.linkLibrary(plctag.artifact("plctag"));
 
 ### Supported targets
 
-| target             | state                 |
-| ------------------ | --------------------- |
-| x86_64-linux       | tested natively       |
-| x86_64-windows-gnu | tested cross-platform |
+| target             | state | note                  |
+| ------------------ | ----- | --------------------- |
+| x86_64-linux       | ✅    |                       |
+| x86-linux          | ✅    |                       |
+| x86_64-macos       | ✅    |                       |
+| aarch64-macos      | ✅    |                       |
+| x86_64-windows-gnu | ✅    | shims for linux hosts |
 
 ## Flags
 
