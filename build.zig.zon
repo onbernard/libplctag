@@ -33,7 +33,9 @@
     // internet connectivity.
     .dependencies = .{
         .libplctag = .{
-            .url = "https://github.com/libplctag/libplctag/archive/refs/tags/v2.6.10.tar.gz",
+            // .url = "https://github.com/libplctag/libplctag/archive/refs/tags/v2.6.10.tar.gz",
+            .url = "git+https://github.com/libplctag/libplctag.git",
+            .rev = "v2.6.10",
             .hash = "N-V-__8AABJbKwBRmMeJDiIOlvZReuzq6NOlh4336D1ieYqM",
         },
     },
