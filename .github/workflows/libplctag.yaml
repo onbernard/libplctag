@@ -1,0 +1,50 @@
+name: libplctag CI
+
+on:
+  push:
+    branches: [ cicd ]
+  pull_request:
+    branches: [ cicd ]
+
+jobs:
+
+  ubuntu_x64:
+    runs-on: ubuntu-22.04
+
+    env:
+      VERSION: "2.6.10"
+      ARTIFACT: "libplctag_2.6.10_ubuntu_x64"
+      BUILD: "${{ github.workspace }}/zig-out"
+      DIST: "${{ github.workspace }}/zig-out/bin"
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+
+      - name: Set up LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lld llvm llvm-dev clang build-essential cmake libmodbus5 libmodbus-dev
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Build
+        run: zig build -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=true -Doptimize=ReleaseFast
+
+      - name: Test Basic Functions
+        run: |
+          cd ${{ env.DIST }}
+          echo "start up simulator..."
+          ${{ env.DIST }}/ab_server --debug --plc=ControlLogix --path=1,0 --tag=TestBigArray:DINT[2000] --delay=50 &
+          sleep 2
+          echo "test simple get/set tag."
+          ${{ env.DIST }}/simple
+          echo "test callback use."
+          ${{ env.DIST }}/test_callback
+          echo "shut down server."
+          killall ab_server -INT &> /dev/null
+

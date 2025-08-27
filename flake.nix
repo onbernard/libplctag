@@ -26,15 +26,27 @@
           };
           buildScript = pkgs.writeShellScriptBin "zig-build-all" ''
             set -euo pipefail
-            echo "▶ Building for x86_64-linux (gnu)..."
-            zig build -Dtarget=x86_64-linux-gnu -Dbuild-examples=true -Dbuild-ab-server=true -Doptimize=ReleaseFast
+            echo "▶ Building for x86_64-linux..."
+            zig build -Dtarget=x86_64-linux -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=true -Doptimize=ReleaseFast
 
-            echo "▶ Building for Windows (gnu)..."
-            zig build -Dtarget=x86_64-windows-gnu -Dbuild-examples=true -Dbuild-ab-server -Doptimize=ReleaseFast
+            echo "▶ Building for Windows..."
+            zig build -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server -Dbuild-modbus-server=true -Doptimize=ReleaseFast
             echo "✅ All builds finished."
+          '';
+          cleanScript = pkgs.writeShellScriptBin "zig-clean-all" ''
+            set -euo pipefail
+            echo "▶ Clearing .zig-cache..."
+            rm -r .zig-cache
+
+            echo "▶ Clearing zig-out..."
+            rm -r zig-out
+            echo "✅ All cleared."
           '';
         in {
           devShell = pkgs.mkShell {
+            LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+              pkgs.libmodbus
+            ];
             packages = [
               # pkgs.zls
               # pkgs.zig
@@ -42,8 +54,15 @@
               zls.packages.${system}.zls
               pkgs.dprint
               pkgs.libmodbus
+              pkgs.pkg-config
               buildScript
+              cleanScript
             ];
+            shellHook = ''
+              export ZIG_GLOBAL_ARGS="$(
+                pkg-config --cflags --libs libmodbus
+              )"
+            '';
           };
         }
       );

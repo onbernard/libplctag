@@ -6,6 +6,7 @@ pub const Options = struct {
     linkage: LinkChoice = .both,
     build_examples: bool = false,
     build_ab_server: bool = false,
+    build_modbus_server: bool = false,
 
     const defaults = Options{};
 
@@ -14,6 +15,7 @@ pub const Options = struct {
             .linkage = b.option(LinkChoice, "linkage", "Choose linkage: static|shared|both") orelse defaults.linkage,
             .build_examples = b.option(bool, "build-examples", "Build examples") orelse defaults.build_examples,
             .build_ab_server = b.option(bool, "build-ab-server", "Build AB server") orelse defaults.build_ab_server,
+            .build_modbus_server = b.option(bool, "build-modbus-server", "Build MODBUS server") orelse defaults.build_modbus_server,
         };
     }
 };
@@ -369,7 +371,7 @@ fn make_examples(b: *std.Build, upstream: *std.Build.Dependency, target: std.Bui
     }
 }
 
-fn make_ab_server(b: *std.Build, upstream: *std.Build.Dependency, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shims_dir: ?std.Build.LazyPath, lib: *std.Build.Step.Compile, c_flags: std.ArrayList([]const u8)) !void {
+fn make_ab_server(b: *std.Build, upstream: *std.Build.Dependency, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shims_dir: ?std.Build.LazyPath, c_flags: std.ArrayList([]const u8)) !void {
     const exe = b.addExecutable(.{
         .name = "ab-server",
         .root_module = b.createModule(.{
@@ -419,9 +421,60 @@ fn make_ab_server(b: *std.Build, upstream: *std.Build.Dependency, target: std.Bu
         },
     }
     if (target.result.os.tag == .macos) {
-        lib.root_module.addCMacro("_DARWIN_C_SOURCE", "null");
+        exe.root_module.addCMacro("_DARWIN_C_SOURCE", "null");
     }
     exe.linkLibC();
+
+    b.installArtifact(exe);
+}
+
+fn make_modbus_server(b: *std.Build, upstream: *std.Build.Dependency, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shims_dir: ?std.Build.LazyPath, c_flags: std.ArrayList([]const u8)) !void {
+    const exe = b.addExecutable(.{
+        .name = "modbus-server",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (shims_dir) |sd| {
+        exe.root_module.addIncludePath(sd);
+    }
+    exe.addCSourceFiles(.{
+        .root = upstream.path("src/tests/modbus_server"),
+        .files = &.{"modbus_server.c"},
+        .flags = c_flags.items,
+    });
+    exe.addCSourceFiles(.{
+        .root = upstream.path("src/libplctag/protocols/mb"),
+        .files = &.{"modbus.c"},
+        .flags = c_flags.items,
+    });
+    exe.root_module.addIncludePath(upstream.path("src/libplctag/protocols/mb"));
+    // exe.root_module.addIncludePath(upstream.path("src/utils"));
+    exe.root_module.addIncludePath(upstream.path("src"));
+    switch (target.result.os.tag) {
+        .windows => {
+            // if (target.result.abi == .gnu) {
+            //     exe.linkSystemLibrary("ws2_32");
+            //     exe.linkSystemLibrary("bcrypt");
+            // } else {
+            //     exe.linkSystemLibrary("Ws2_32");
+            //     exe.linkSystemLibrary("Bcrypt");
+            // }
+            // exe.root_module.addIncludePath(upstream.path("src/platform/windows"));
+        },
+        else => {
+            exe.root_module.addIncludePath(upstream.path("src/platform/posix"));
+            exe.root_module.addCMacro("__USE_POSIX", "1");
+            exe.root_module.addCMacro("_XOPEN_SOURCE", "700");
+            exe.root_module.addCMacro("_POSIX_C_SOURCE", "200809L");
+        },
+    }
+    if (target.result.os.tag == .macos) {
+        exe.root_module.addCMacro("_DARWIN_C_SOURCE", "null");
+    }
+    exe.linkLibC();
+    exe.linkSystemLibrary("modbus");
 
     b.installArtifact(exe);
 }
@@ -464,6 +517,9 @@ pub fn build(b: *std.Build) !void {
         try make_examples(b, upstream, target, optimize, shims_dir, lib_static orelse lib_shared.?, c_flags);
     }
     if (options.build_ab_server) {
-        try make_ab_server(b, upstream, target, optimize, shims_dir, lib_static orelse lib_shared.?, c_flags);
+        try make_ab_server(b, upstream, target, optimize, shims_dir, c_flags);
+    }
+    if (options.build_modbus_server and target.result.os.tag == .linux) {
+        try make_modbus_server(b, upstream, target, optimize, shims_dir, c_flags);
     }
 }
