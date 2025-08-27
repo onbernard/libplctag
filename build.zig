@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const LinkChoice = enum { static, shared, both };
 
@@ -21,7 +22,7 @@ pub const Options = struct {
 };
 
 fn make_shims_dir(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyPath {
-    if (target.result.os.tag == .windows and target.result.abi.isGnu()) {
+    if (target.result.os.tag == .windows and builtin.target.os.tag != .windows) {
         const shims = b.addWriteFiles();
         // Case-fix shims so capitalized includes resolve on case-sensitive hosts.
         _ = shims.add("Windows.h",
