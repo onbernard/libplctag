@@ -410,6 +410,9 @@ jobs:
     runs-on: windows-latest
 
     env:
+      ZIG_GLOBAL_CACHE_DIR: C:\zg
+      TEMP: C:\t
+      TMP: C:\t
       VERSION: "2.6.10"
       DIST: "${{ github.workspace }}\\zig-out\\bin"
       BRANCH: ${{ github.head_ref || github.ref_name }}
@@ -420,11 +423,17 @@ jobs:
         with:
           ref: ${{ env.BRANCH }}
 
+      - name: Prepare short paths
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force C:\zg | Out-Null
+          New-Item -ItemType Directory -Force C:\t  | Out-Null
+
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
 
       - name: Build
-        run: zig build -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast
+        run: zig build -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=false -Doptimize=ReleaseFast --global-cache-dir "$env:ZIG_GLOBAL_CACHE_DIR" ` --cache-dir ".zig-cache"
 
       - name: Test Basic Functions
         run: |
