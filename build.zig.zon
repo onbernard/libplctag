@@ -34,7 +34,8 @@
     .dependencies = .{
         .libplctag = .{
             // .url = "https://github.com/libplctag/libplctag/archive/refs/tags/v2.6.10.tar.gz",
-            .url = "git+https://github.com/libplctag/libplctag.git",
+            // .url = "git+https://github.com/libplctag/libplctag.git",
+            .url = "git+https://github.com/libplctag/libplctag.git#db6ef8cd594cead26b62fe1fce3bcdad53b6f819",
             .rev = "v2.6.10",
             .hash = "N-V-__8AABJbKwBRmMeJDiIOlvZReuzq6NOlh4336D1ieYqM",
         },

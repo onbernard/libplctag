@@ -24,7 +24,7 @@
             inherit system;
             overlays = [zig-overlay.overlays.default];
           };
-          buildScript = pkgs.writeShellScriptBin "zig-build-all" ''
+          buildScript = pkgs.writeShellScriptBin "build-all" ''
             set -euo pipefail
             echo "▶ Building for x86_64-linux..."
             zig build -Dtarget=x86_64-linux -Dbuild-examples=true -Dbuild-ab-server=true -Dbuild-modbus-server=true -Doptimize=ReleaseFast
@@ -42,7 +42,7 @@
             zig build -Dtarget=x86_64-windows -Dbuild-examples=true -Dbuild-ab-server -Dbuild-modbus-server=true -Doptimize=ReleaseFast
             echo "✅ All builds finished."
           '';
-          cleanScript = pkgs.writeShellScriptBin "zig-clean-all" ''
+          cleanScript = pkgs.writeShellScriptBin "clean-all" ''
             set -euo pipefail
             echo "▶ Clearing .zig-cache..."
             rm -r .zig-cache
